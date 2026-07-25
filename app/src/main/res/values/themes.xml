@@ -1,0 +1,3 @@
+<resources>
+    <style name="Theme.Podometro" parent="android:Theme.Material.Light.NoActionBar" />
+</resources>

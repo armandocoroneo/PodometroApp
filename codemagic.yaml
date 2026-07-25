@@ -1,0 +1,78 @@
+workflows:
+  android-debug:
+    name: Build Android Debug APK
+    instance_type: mac_mini_m1
+    max_build_duration: 30
+    environment:
+      android_signing:
+        - podometro_keystore
+      groups:
+        - android_credentials
+      vars:
+        PACKAGE_NAME: "com.tuapp.podometro"
+    cache:
+      cache_paths:
+        - $HOME/.gradle/caches
+    triggering:
+      events:
+        - push
+        - pull_request
+      branch_patterns:
+        - pattern: main
+          include: true
+          source: true
+    scripts:
+      - name: Set Android SDK
+        script: |
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > "$CM_BUILD_DIR/local.properties"
+
+      - name: Build Debug APK
+        script: |
+          cd "$CM_BUILD_DIR"
+          ./gradlew assembleDebug
+    artifacts:
+      - app/build/outputs/apk/debug/*.apk
+    publishing:
+      email:
+        recipients:
+          - $CM_EMAIL_RECIPIENT
+        notify:
+          success: true
+          failure: true
+
+  android-release:
+    name: Build Android Release APK
+    instance_type: mac_mini_m1
+    max_build_duration: 30
+    environment:
+      android_signing:
+        - podometro_keystore
+      groups:
+        - android_credentials
+      vars:
+        PACKAGE_NAME: "com.tuapp.podometro"
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: release/*
+          include: true
+          source: true
+    scripts:
+      - name: Set Android SDK
+        script: |
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > "$CM_BUILD_DIR/local.properties"
+
+      - name: Build Release APK
+        script: |
+          cd "$CM_BUILD_DIR"
+          ./gradlew assembleRelease
+    artifacts:
+      - app/build/outputs/apk/release/*.apk
+    publishing:
+      email:
+        recipients:
+          - $CM_EMAIL_RECIPIENT
+        notify:
+          success: true
+          failure: true
