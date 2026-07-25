@@ -26,9 +26,7 @@ class StepCounterService : Service(), SensorEventListener {
     private val binder = LocalBinder()
     private lateinit var sensorManager: SensorManager
 
-    // Intentamos usar el sensor de pasos dedicado del hardware primero
     private var stepCounterSensor: Sensor? = null
-    // Fallback al acelerómetro
     private var accelerometer: Sensor? = null
     private val stepDetector = StepDetector { onStepDetected() }
 
@@ -41,6 +39,7 @@ class StepCounterService : Service(), SensorEventListener {
         private set
 
     private var callback: ((Int, Long, String) -> Unit)? = null
+    private var stepCounterOffset = -1
 
     inner class LocalBinder : Binder() {
         fun getService(): StepCounterService = this@StepCounterService
@@ -50,10 +49,7 @@ class StepCounterService : Service(), SensorEventListener {
         super.onCreate()
         sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
 
-        // Preferencia 1: Sensor de pasos dedicado (más preciso, consume menos batería)
         stepCounterSensor = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER)
-
-        // Preferencia 2: Acelerómetro (fallback)
         accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
 
         when {
@@ -83,6 +79,7 @@ class StepCounterService : Service(), SensorEventListener {
         isRunning = true
         startTime = System.currentTimeMillis()
         steps = 0
+        stepCounterOffset = -1
 
         when (sensorType) {
             "hardware_step_counter" -> {
@@ -123,28 +120,24 @@ class StepCounterService : Service(), SensorEventListener {
     }
 
     override fun onSensorChanged(event: SensorEvent?) {
-        event?.let {
-            when (it.sensor.type) {
+        event?.let { ev ->
+            when (ev.sensor.type) {
                 Sensor.TYPE_STEP_COUNTER -> {
-                    // El sensor devuelve el total de pasos desde el arranque del móvil
-                    // Necesitamos calcular la diferencia
-                    val totalSteps = it.values[0].toInt()
-                    if (steps == 0) {
-                        // Primer lectura: guardamos el offset
-                        startTime = System.currentTimeMillis()
+                    val totalSteps = ev.values[0].toInt()
+                    if (stepCounterOffset == -1) {
+                        stepCounterOffset = totalSteps
                     }
-                    // En un servicio real necesitaríamos persistir el offset
-                    // Por simplicidad, contamos diferencias
-                    val currentSteps = totalSteps - (event.timestamp / 1000000).toInt() // placeholder
-                    // Simplificación: usamos el valor directo para demo
-                    steps = totalSteps % 100000  // Evitar overflow visual
+                    steps = totalSteps - stepCounterOffset
                     val elapsed = if (startTime > 0) System.currentTimeMillis() - startTime else 0
                     callback?.invoke(steps, elapsed, sensorType)
                 }
                 Sensor.TYPE_ACCELEROMETER -> {
                     stepDetector.processAccelerometerData(
-                        it.values[0], it.values[1], it.values[2], System.currentTimeMillis()
+                        ev.values[0], ev.values[1], ev.values[2], System.currentTimeMillis()
                     )
+                }
+                else -> {
+                    // Ignorar otros tipos de sensores
                 }
             }
         }
