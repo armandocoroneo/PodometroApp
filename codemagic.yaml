@@ -21,7 +21,7 @@ workflows:
       - name: Set Android SDK
         script: |
           echo "sdk.dir=$ANDROID_SDK_ROOT" > "$CM_BUILD_DIR/local.properties"
-      
+
       - name: Build Debug APK
         script: |
           cd "$CM_BUILD_DIR"
@@ -47,7 +47,7 @@ workflows:
       - name: Set Android SDK
         script: |
           echo "sdk.dir=$ANDROID_SDK_ROOT" > "$CM_BUILD_DIR/local.properties"
-      
+
       - name: Build Release APK
         script: |
           cd "$CM_BUILD_DIR"
