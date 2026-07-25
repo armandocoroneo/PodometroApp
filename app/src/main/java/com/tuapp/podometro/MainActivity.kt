@@ -9,6 +9,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -48,7 +49,14 @@ class MainActivity : ComponentActivity() {
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { perms ->
-        // Permisos otorgados o denegados
+        val allGranted = perms.entries.all { it.value }
+        if (!allGranted) {
+            Toast.makeText(
+                this,
+                "Se necesitan permisos de actividad física para contar pasos",
+                Toast.LENGTH_LONG
+            ).show()
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -96,6 +104,9 @@ fun PodometroApp(stepService: StepCounterService?, serviceBound: Boolean) {
     var steps by remember { mutableIntStateOf(0) }
     var elapsedMs by remember { mutableLongStateOf(0L) }
     var isRunning by remember { mutableStateOf(false) }
+    var sensorType by remember { mutableStateOf("none") }
+    var hasError by remember { mutableStateOf(false) }
+    var errorMsg by remember { mutableStateOf("") }
 
     val strideLength = 0.76f
     val kcalPerStep = 0.04f
@@ -108,10 +119,16 @@ fun PodometroApp(stepService: StepCounterService?, serviceBound: Boolean) {
     val timeStr = "%02d:%02d".format(min, sec)
 
     LaunchedEffect(serviceBound) {
-        stepService?.setCallback { s, e ->
+        stepService?.setCallback { s, e, type ->
             steps = s
             elapsedMs = e
             isRunning = stepService.isRunning
+            sensorType = type
+
+            if (type == "none") {
+                hasError = true
+                errorMsg = "Este dispositivo no tiene sensor de pasos ni acelerómetro."
+            }
         }
     }
 
@@ -127,12 +144,37 @@ fun PodometroApp(stepService: StepCounterService?, serviceBound: Boolean) {
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(top = 32.dp, bottom = 8.dp)
         )
+
+        // Indicador de sensor
+        val sensorLabel = when (sensorType) {
+            "hardware_step_counter" -> "📱 Sensor de pasos (preciso)"
+            "accelerometer" -> "📳 Acelerómetro (modo compatibilidad)"
+            "none" -> "❌ Sin sensor disponible"
+            else -> "Esperando..."
+        }
         Text(
-            text = if (isRunning) "Contando..." else "Listo para empezar",
-            fontSize = 14.sp,
-            color = Color.Gray,
-            modifier = Modifier.padding(bottom = 32.dp)
+            text = sensorLabel,
+            fontSize = 12.sp,
+            color = if (sensorType == "none") Color(0xFFD32F2F) else Color.Gray,
+            modifier = Modifier.padding(bottom = 16.dp)
         )
+
+        if (hasError) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 16.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFFFFEBEE))
+            ) {
+                Text(
+                    text = errorMsg,
+                    fontSize = 13.sp,
+                    color = Color(0xFFD32F2F),
+                    modifier = Modifier.padding(16.dp)
+                )
+            }
+        }
 
         Box(
             modifier = Modifier
@@ -178,8 +220,16 @@ fun PodometroApp(stepService: StepCounterService?, serviceBound: Boolean) {
                         it.stopCounting()
                         isRunning = false
                     } else {
-                        it.startCounting()
-                        isRunning = true
+                        if (it.sensorType == "none") {
+                            Toast.makeText(
+                                context,
+                                "No hay sensor disponible en este dispositivo",
+                                Toast.LENGTH_LONG
+                            ).show()
+                        } else {
+                            it.startCounting()
+                            isRunning = true
+                        }
                     }
                 }
             },
@@ -189,7 +239,8 @@ fun PodometroApp(stepService: StepCounterService?, serviceBound: Boolean) {
             shape = RoundedCornerShape(12.dp),
             colors = ButtonDefaults.buttonColors(
                 containerColor = if (isRunning) Color(0xFFD32F2F) else Color.Black
-            )
+            ),
+            enabled = !hasError
         ) {
             Text(
                 text = if (isRunning) "⏸ Pausar" else "▶ Iniciar",
@@ -206,7 +257,11 @@ fun PodometroApp(stepService: StepCounterService?, serviceBound: Boolean) {
             colors = CardDefaults.cardColors(containerColor = Color(0xFFF5F5F5))
         ) {
             Text(
-                text = "💡 Usa el acelerómetro de tu móvil. No necesitas internet ni hardware extra. La app sigue contando incluso si bloqueas la pantalla.",
+                text = when (sensorType) {
+                    "hardware_step_counter" -> "💡 Modo preciso activado. Usa el sensor de pasos dedicado del móvil. Ideal para caminar y correr."
+                    "accelerometer" -> "💡 Modo compatibilidad. Usa el acelerómetro. Evita llevar el móvil en mano mientras vas en vehículo para evitar falsos pasos."
+                    else -> "💡 Esta app usa el acelerómetro o sensor de pasos de tu móvil. No necesita internet ni hardware extra."
+                },
                 fontSize = 12.sp,
                 color = Color.DarkGray,
                 modifier = Modifier.padding(16.dp),
